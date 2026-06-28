@@ -89,13 +89,18 @@ their individual contributions to bug recall.
 This paper makes the following contributions:
 
 \begin{itemize}
-  \item We formulate Python/C API correctness as dischargeable safety
-  obligations and construct a specification with 13 obligation categories
-  and 41 discharge conditions.
-  \item We design and implement \tool, which combines static obligation
-  binding and pattern-based pruning with structured, path-oriented
-  LLM checking and evidence-bearing reports.
-  \item We evaluate \tool on real Python native extensions, find 86 previously
-  unknown bugs at 82.7\% precision, compare with the closest reproducible
-  analyzer, and isolate the effects of pruning and structured checking.
+  \item We introduce the \emph{safety obligation} abstraction for Python/C API
+  correctness, which captures each API requirement as an obligation with
+  explicit discharge conditions, extending the checkable scope beyond reference
+  counting to exception state, resource protocols, type agreement, and numeric
+  bounds.
+  \item We propose \tool, to our knowledge the first Python native extension bug
+  detector grounded in safety-obligation checking, which decomposes the checking
+  task into static obligation binding and structured LLM discharge reasoning to
+  deliver auditable, path-oriented verdicts without requiring a complete program
+  model.
+  \item We evaluate \tool on nine widely used Python native extensions and find
+  86 previously unknown bugs at 82.7\% precision---more than 10$\times$ the
+  precision of the closest reproducible baseline---of which 45 have been
+  confirmed or fixed by maintainers.
 \end{itemize}
