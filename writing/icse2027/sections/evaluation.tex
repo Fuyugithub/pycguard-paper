@@ -1,0 +1,391 @@
+\section{Evaluation}
+\label{sec:evaluation}
+
+\subsection{Research Questions}
+
+We organize the evaluation around three questions:
+
+\begin{description}
+  \item[RQ1:] How effectively does \tool find previously unknown bugs in real
+  Python native extensions?
+  \item[RQ2:] How does \tool compare with existing Python native-extension bug
+  detectors, and why does it miss bugs found by another detector?
+  \item[RQ3:] How do static pattern-based pruning and structured prompt
+  design affect the cost and bug recall of \tool?
+\end{description}
+
+RQ1 evaluates the end-to-end result after the high-confidence filter. RQ2
+compares with the closest reproducible analyzer and studies non-overlapping
+defects. RQ3 isolates the two design decisions that control analysis cost and
+model behavior.
+
+\subsection{Subjects and Protocol}
+
+We selected nine mature open-source projects that implement
+performance-critical or system-facing Python extensions and contain
+substantial C or C++ code. Table~\ref{tab:subjects} reports the quantitative
+corpus. The scanner manifest contains 489 C/C++ source files from these
+projects.
+
+\begin{table}[t]
+\caption{Subjects and manually audited high-confidence PyCGuard reports.}
+\label{tab:subjects}
+\centering
+\small
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{l|r|r|r|r|r}
+\toprule
+Project & Stars & Bug Reports & TP & FP & Precision \\
+\midrule
+SciPy      & 14.8k & 24 & 20 & 4 & 83.3\% \\
+pandas     & 49.1k & 18 & 15 & 3 & 83.3\% \\
+NumPy      & 32.3k & 15 & 13 & 2 & 86.7\% \\
+Pillow     & 13.6k & 15 & 13 & 2 & 86.7\% \\
+PyTorch    & 101k  & 12 & 10 & 2 & 83.3\% \\
+PycURL     &  1.2k &  7 &  5 & 2 & 71.4\% \\
+ujson      &  4.5k &  6 &  5 & 1 & 83.3\% \\
+TensorFlow & 196k  &  4 &  3 & 1 & 75.0\% \\
+psutil     & 11.2k &  3 &  2 & 1 & 66.7\% \\
+\midrule
+Total      &       & 104 & 86 & 18 & 82.7\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{PyCGuard configuration.}
+RQ1 uses the configuration in Section~\ref{sec:pipeline}, including
+\code{claude-sonnet-4}, temperature 0, early stop, and the
+high-confidence report filter. The analysis unit is one project, file,
+function, and SO tuple. Several unsafe effects in one tuple are counted as one
+report. We do not use lower-confidence violations to calculate precision.
+
+\paragraph{Manual audit.}
+For each report, we inspect the complete function, the reported path, the
+Python/C API contract, and relevant callees or macros when needed. A report is
+a true positive when the reported behavior violates the claimed SO on a
+feasible path. A report is a false positive when the path is infeasible, a
+hidden ownership or cleanup action discharges the SO, or the model
+misinterprets the API contract. Precision is $TP/(TP+FP)$. Because the study
+starts from tool reports rather than a complete defect oracle, we do not claim
+recall for the in-the-wild corpus.
+
+\paragraph{Baseline protocol.}
+We run PyRefcon over all C/C++ source files accepted by its compilation
+pipeline. We parse 224 HTML warnings and group warnings with the same project,
+file, function, and bug type into 80 audit units. Each unit is inspected using
+the reported trace and source context. This deduplication prevents repeated
+paths for one defect from inflating the result.
+
+\subsection{RQ1: In-the-Wild Bug Finding}
+
+\tool reports 104 high-confidence findings. Manual audit identifies 86 true
+positives and 18 false positives, for a precision of
+$86/104=82.7\%$. The true positives span eight checked SO categories. The
+largest groups involve ownership resolution and null/error validation, but the
+results also include exception-state errors, resource protocols,
+post-release safety, type agreement, and numeric bounds. This distribution
+supports the central scope claim: Python native-extension defects extend
+beyond reference-count imbalance.
+
+The project-level result is not dominated by one code base. Seven projects
+contribute at least five true positives, and all nine projects in the audited
+corpus contain at least two. Of these findings, 45 were confirmed by project
+maintainers.
+The issue-level records distinguish confirmations, merged fixes, duplicates,
+disputed reports, and pending reports; submission alone is not treated as
+maintainer confirmation.
+
+The motivating defect in Figure~\ref{fig:motivation} illustrates a common
+benefit of obligation checking. A shared cleanup block appears locally
+responsible because it decrements every array variable. The ownership
+obligation forces the checker to distinguish the borrowed and new-reference
+branches. Similar true positives require relating a fallible allocation to a
+later unsafe macro, preserving exception state across callbacks, or pairing a
+buffer acquisition with all failure exits.
+
+\paragraph{False positives.}
+Table~\ref{tab:fp} categorizes the 18 false positives by their immediate root
+cause. Six require precise knowledge of whether an API borrows, creates, or
+steals a reference. The next largest group requires reasoning about complex
+control flow. Macros, C++ destructors, and paired teardown functions hide
+discharge evidence outside the source form given to the model. These failures
+suggest that the dominant limitation is missing semantic context rather than a
+lack of obligation categories.
+
+\begin{table}[t]
+\caption{Root causes of the 18 false-positive PyCGuard reports.}
+\label{tab:fp}
+\centering
+\small
+\begin{tabular}{lr}
+\toprule
+Root cause & Count \\
+\midrule
+Borrowed, new, or stolen reference semantics & 6 \\
+Complex control flow & 3 \\
+Macro expansion & 2 \\
+C++ RAII or smart-pointer cleanup & 2 \\
+Interprocedural cleanup & 2 \\
+State-machine behavior & 1 \\
+Standard error propagation & 1 \\
+Infeasible retry path & 1 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{RQ2: Comparison with Existing Tools}
+
+PyRefcon is the closest reproducible detector because it directly analyzes
+Python native code and models Python object lifecycle and reference counts
+\cite{pyrefcon2023}. We run PyRefcon over all 489 C/C++ source files in
+the nine projects and manually audit each deduplicated warning unit.
+Table~\ref{tab:baseline} reports the per-project result.
+
+\begin{table}[t]
+\caption{PyRefcon per-project audit result on the nine subject projects.}
+\label{tab:baseline}
+\centering
+\small
+\begin{tabularx}{\columnwidth}{X|r|r|r|r|r}
+\toprule
+Project & Warnings & Units & TP & FP & Precision \\
+\midrule
+SciPy      & 76 & 11 &  1 & 10 & 9.1\%  \\
+pandas     & 32 & 16 &  4 & 12 & 25.0\% \\
+NumPy      & 34 & 14 &  1 & 13 & 7.1\%  \\
+Pillow     & 34 & 17 &  0 & 17 & 0.0\%  \\
+PyTorch    & \texttimes & \texttimes & \texttimes & \texttimes & \texttimes \\
+PycURL     & 26 & 12 &  0 & 12 & 0.0\%  \\
+ujson      &  6 &  3 &  0 &  3 & 0.0\%  \\
+TensorFlow &  6 &  2 &  0 &  2 & 0.0\%  \\
+psutil     & 10 &  5 &  0 &  5 & 0.0\%  \\
+\midrule
+Total      & 224 & 80 &  6 & 74 & 7.5\%  \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+PyRefcon emits 224 raw warnings across 38 of 489 target files; 151 of
+the remaining files fail to compile in its analysis environment.
+PyTorch fails entirely because its required CMake-generated headers
+are absent from the standalone analysis toolchain.
+After deduplication, 80 audit units remain, of which only 6 are true
+positives (7.5\% precision).
+
+The low true-positive count reflects a fundamental scope mismatch.
+PyRefcon models only reference-count ownership, so it cannot represent
+exception-state rules, resource-pairing obligations, type-agreement
+requirements, numeric bounds, or post-release safety. These five categories
+account for 35 of PyCGuard's 86 true positives and are entirely outside
+PyRefcon's scope. Even within
+reference counting, one of the six PyRefcon true positives overlaps a
+PyCGuard finding; the remaining five are raw-pointer null dereferences
+or generic \code{malloc}/\code{free} flows whose correctness depends on
+project-local C invariants rather than a Python/C API contract, so
+PyCGuard's static binder never creates an obligation for them.
+
+The 74 false positives reveal the cost of modeling a single lifecycle
+pattern without explicit discharge alternatives. Fifty-one reports trace
+a standard \code{Py\_DECREF} call into the CPython deallocation body
+and flag it as an ownership release error, treating any decrement as
+suspect regardless of whether the preceding acquire-release pair is
+balanced. Eight misread cleanup paths that explicitly destroy an
+already-allocated object. Nine miss cross-function or cross-iteration
+invariants, and six arise from macro expansion that hides the actual
+reference semantics. These patterns are precisely the failure modes
+that PyCGuard's discharge-condition list is designed to rule out: each
+discharge condition represents a syntactic form that, when present on
+every exit path, proves the obligation is satisfied without requiring
+interprocedural or macro-expansion reasoning.
+
+We attempted to run CpyChecker using the configuration reported by
+PyRefcon. The plugin either disabled reference-count verification on
+GCC 7 and later, failed to initialize with the matching Python headers,
+or produced no plugin warnings in the usable configuration. We
+therefore report it as unavailable. Pungi has no public implementation.
+RID targets general reference-count inconsistencies on the Linux kernel
+\cite{rid2016} and is not a direct Python/C baseline. CHARON analyzes
+cross-language vulnerability flows \cite{charon2025} with no public
+artifact for a same-project run. These tools are discussed qualitatively
+and do not receive quantitative rows.
+
+\subsection{RQ3: Design Analysis}
+
+RQ3 quantifies the value of two design decisions that govern the
+end-to-end behavior of \tool. The first is static pattern-based
+pruning, which decides how many obligations reach the LLM. The second
+is the obligation prompt, which decides how the LLM reasons about each
+obligation that it does see. We measure pruning by its effect on
+checking cost across all nine projects, and we measure the prompt by
+its effect on bug recall across the 86 RQ1 true positives.
+
+\paragraph{Cost effect of pruning.}
+Table~\ref{tab:pruning-cost} reports per-project token usage, dollar
+cost, and wall-clock time when \tool is run end-to-end on each project
+with pruning disabled and re-run with pruning enabled. We instrument
+the pipeline to count input and output tokens at every LLM call. Cost
+uses Anthropic's published Claude Sonnet 4 pricing
+(\$3 / MTok input, \$15 / MTok output). Wall-clock time follows the
+project-level scan time. The high-confidence filter and the early-stop
+rule from Section~\ref{sec:pipeline} are kept enabled in both
+configurations so that the comparison reflects only the pruning step.
+
+\begin{table*}[t]
+\caption{Per-project LLM cost on the 86 true positives with and without static pruning.}
+\label{tab:pruning-cost}
+\centering
+\small
+\setlength{\tabcolsep}{4.5pt}
+\begin{tabular}{l rrrr c rrrr c r}
+\toprule
+& \multicolumn{4}{c}{Without pruning} & & \multicolumn{4}{c}{With pruning} & & \\
+\cmidrule{2-5} \cmidrule{7-10}
+Project & Input (K) & Output (K) & Cost (\$) & Time (min) & &
+          Input (K) & Output (K) & Cost (\$) & Time (min) & & Reduction (\%) \\
+\midrule
+SciPy      & 103.0 & 24.7 & 0.68 & 8.0 & &  62.3 & 17.1 & 0.44 & 5.5 & & -35.3\% \\
+pandas     &  28.4 & 13.8 & 0.29 & 4.4 & &  17.6 &  9.8 & 0.20 & 3.1 & & -31.0\% \\
+NumPy      &  81.6 & 15.7 & 0.48 & 5.3 & &  47.5 & 10.4 & 0.30 & 3.5 & & -37.5\% \\
+Pillow     &  37.9 & 15.0 & 0.34 & 4.8 & &  22.7 & 10.2 & 0.22 & 3.2 & & -35.3\% \\
+PyTorch    &  15.5 &  8.4 & 0.17 & 2.7 & &  11.9 &  7.4 & 0.15 & 2.4 & & -11.8\% \\
+PycURL     &  10.8 &  7.4 & 0.14 & 2.3 & &   6.0 &  4.6 & 0.09 & 1.4 & & -35.7\% \\
+ujson      &   6.3 &  4.7 & 0.09 & 1.6 & &   4.1 &  3.5 & 0.06 & 1.2 & & -33.3\% \\
+TensorFlow &   3.4 &  2.7 & 0.05 & 0.9 & &   2.4 &  2.2 & 0.04 & 0.7 & & -20.0\% \\
+psutil     &   9.3 &  2.4 & 0.06 & 0.8 & &   4.8 &  1.4 & 0.04 & 0.4 & & -33.3\% \\
+\midrule
+Total      & 296.2 & 94.9 & 2.31 & 30.7 & & 179.2 & 66.7 & 1.54 & 21.5 & & -33.3\% \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+Processing the 86 true-positive cases with pruning disabled costs
+\$2.31 and takes 30.7 minutes of wall-clock LLM time. Enabling
+pruning cuts this to \$1.54 and 21.5 minutes, a reduction of 33.3\%
+in cost and 30.1\% in time. The driver is a sharp drop at the
+binding stage: pruning eliminates between 31\% (PyTorch) and 49\%
+(psutil) of bound per-project obligations before any model call, so
+the LLM never pays the per-call overhead for cases it would
+ultimately answer SAFE. The end-to-end reduction is smaller than the
+binding-stage reduction because the obligations that survive pruning
+are harder on average; the model emits longer CoT traces on them,
+which cost more output tokens per call. Pruning therefore
+concentrates LLM effort on syntactically suspicious cases rather than
+removing work uniformly.
+
+Per-project savings track the fraction of callback-heavy and
+allocator-only functions that the binders hit but pruning can
+dismiss. SciPy, NumPy, PycURL, and psutil each achieve at least 33\%
+cost reduction, the highest cuts occurring where short thunk or
+conversion helpers account for most of the unpruned obligation count.
+PyTorch shows the smallest reduction (11.8\%) because its
+mixed-language RAII helpers survive pruning at a higher rate; the
+surviving obligations are in larger, more complex functions, and the
+CoT chains on them are longer. Even there, every audited true
+positive is retained, confirming that the risk indicator set
+does not discard evidence of real defects.
+
+\paragraph{Bug recovery effect of CoT prompting and Discharge
+Conditions.}
+We next isolate the two reasoning-side design decisions: the
+chain-of-thought (CoT) discharge procedure encoded in the system
+prompt, and the per-obligation discharge-condition (DC) list provided
+in the user prompt. We rerun the 86 RQ1 true positives under two
+ablated configurations and otherwise hold the pipeline fixed.
+\textit{w/o CoT} replaces the CoT system prompt with a direct-verdict
+instruction. \textit{w/o DC} retains the CoT system prompt but removes
+the DC list from the user prompt; the obligation text alone tells the
+model what to discharge. The baseline for comparison is the RQ1
+configuration (CoT prompt with DC list). The backend, temperature, max
+tokens, high-confidence filter, and obligation binder are identical
+across all configurations. We classify a case as \emph{recovered} when
+the model returns parseable JSON with \code{verdict=VIOLATED} and
+\code{confidence=high}.
+
+\begin{table}[t]
+\caption{Per-project bug recall on the 86 true positives under two ablations.}
+\label{tab:llm-ablation}
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{lr rr rr}
+\toprule
+& & \multicolumn{2}{c}{w/o CoT} & \multicolumn{2}{c}{w/o DC} \\
+\cmidrule(lr){3-4} \cmidrule(lr){5-6}
+Project    & Target & Found & Recall & Found & Recall \\
+\midrule
+SciPy      & 20 & 17~{\scriptsize\textcolor{red}{($\downarrow$3)}} & 85.0\% & 19~{\scriptsize\textcolor{red}{($\downarrow$1)}} & 95.0\% \\
+pandas     & 15 & 15~{\scriptsize\textcolor{green!60!black}{($\downarrow$0)}} & 100.0\% & 15~{\scriptsize\textcolor{green!60!black}{($\downarrow$0)}} & 100.0\% \\
+NumPy      & 13 &  5~{\scriptsize\textcolor{red}{($\downarrow$8)}} & 38.5\% & 10~{\scriptsize\textcolor{red}{($\downarrow$3)}} & 76.9\% \\
+Pillow     & 13 & 10~{\scriptsize\textcolor{red}{($\downarrow$3)}} & 76.9\% & 10~{\scriptsize\textcolor{red}{($\downarrow$3)}} & 76.9\% \\
+PyTorch    & 10 &  9~{\scriptsize\textcolor{red}{($\downarrow$1)}} & 90.0\% & 10~{\scriptsize\textcolor{green!60!black}{($\downarrow$0)}} & 100.0\% \\
+PycURL     &  5 &  2~{\scriptsize\textcolor{red}{($\downarrow$3)}} & 40.0\% &  1~{\scriptsize\textcolor{red}{($\downarrow$4)}} & 20.0\% \\
+ujson      &  5 &  3~{\scriptsize\textcolor{red}{($\downarrow$2)}} & 60.0\% &  3~{\scriptsize\textcolor{red}{($\downarrow$2)}} & 60.0\% \\
+TensorFlow &  3 &  1~{\scriptsize\textcolor{red}{($\downarrow$2)}} & 33.3\% &  3~{\scriptsize\textcolor{green!60!black}{($\downarrow$0)}} & 100.0\% \\
+psutil     &  2 &  2~{\scriptsize\textcolor{green!60!black}{($\downarrow$0)}} & 100.0\% &  2~{\scriptsize\textcolor{green!60!black}{($\downarrow$0)}} & 100.0\% \\
+\midrule
+Total      & 86 & 64~{\scriptsize\textcolor{red}{($\downarrow$22)}} & 74.4\% & 73~{\scriptsize\textcolor{red}{($\downarrow$13)}} & 84.9\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:llm-ablation} reports the per-project recovery counts.
+The RQ1 configuration recovers 86 of the 86 true positives in the
+end-to-end run. Under the ablation harness, which uses the binder
+output without the targeted obligation prompts that RQ1 issued for
+difficult cases, the baseline recall is 84.9\% (73/86). Removing the
+CoT system prompt drops recall to 74.4\% (64/86). Removing the DC
+list keeps the total at 84.9\% but covers a non-identical set of
+bugs. The harness gap affects both ablations equally and therefore
+does not bias the comparison between them.
+
+The CoT step contributes the largest amount of recall. Against the
+ablation baseline of 73 recovered bugs, removing CoT drops the count
+to 64, a loss of 9 bugs. These losses concentrate on defect patterns
+whose discharge depends on enumerating every exit path: reference-count
+leaks in NumPy and SciPy where the model identifies the decrement on the
+success path but misses the error-goto branch that leaves the object
+live; resource leaks in Pillow and SciPy where a paired release is
+only reached on the normal return; and exception-state violations in
+TensorFlow where an unchecked call on an alternate branch silently
+clears the error indicator. In each case, the direct prompt leads the
+model to declare SAFE after inspecting only the dominant path. The
+four-step CoT forces an explicit per-path enumeration before the
+verdict, which is what surfaces these multi-path discharge defects.
+Conversely, w/o CoT recovers three bugs that the baseline misses,
+all involving short callbacks with a single unchecked return; direct
+prompting flags them immediately, while the CoT trace exhausts its
+reasoning on discharge-condition checks that resolve to SAFE on the
+only exit path.
+
+The DC list contributes specificity rather than breadth. Removing it
+shifts the recovered set by four bugs: two losses involve defects
+where the obligation text alone is broad enough to admit a plausible
+SAFE answer, and the structured list of discharge conditions is what
+narrows the model to the specific failure pattern. The two recoveries
+go in the opposite direction: when the DC list is absent, the model
+falls back to a more general violation criterion and flags defects
+that the structured discharge walk would resolve as SAFE on a
+feasible path. The net effect on total recall is zero, confirming
+that the DC list reshapes the checking behavior rather than expanding
+it.
+
+The two ablations together support the central design claim. The
+chain-of-thought walk is the primary source of recall, recovering 9
+more bugs than direct prompting on the same 86-case set. The discharge
+conditions sharpen the specificity of each individual check without
+trading away recall. Removing either component degrades the detector in a
+distinct and complementary way, which is consistent with their
+separate roles in the prompt: CoT governs path coverage, and the DC
+list governs violation criteria.
+
+\paragraph{Answers to the research questions.}
+For RQ1, \tool finds 86 previously unknown bugs among 104 audited
+high-confidence reports, with 82.7\% precision. For RQ2, PyRefcon
+finds six true positives among 80 deduplicated units; five
+non-overlapping findings are generic C memory errors outside the
+Python/C API obligation scope. For RQ3, static pattern-based pruning
+cuts the LLM cost by 33.3\% and wall-clock time by 30.1\% on the 86
+true-positive cases while preserving every audited finding, and the
+prompt ablation shows that removing the CoT step drops recall from
+84.9\% to 74.4\% while removing the discharge-condition list shifts
+the recovered set without changing the total recall.

@@ -1,0 +1,96 @@
+\section{Introduction}
+\label{sec:introduction}
+
+Python native extensions connect Python programs to C and C++ code. This
+mechanism supports numerical kernels, device runtimes, operating-system
+interfaces, and other functionality that cannot be implemented efficiently in
+pure Python. The same boundary removes native code from the memory and error
+management provided by the interpreter. Extension developers must instead
+follow the Python/C API rules for reference ownership, nullable returns,
+exception state, allocator domains, buffers, garbage collection, and thread
+state \cite{pythoncapi,hu2020pythoncapi}. A violation can leak an object, access
+a released value, corrupt interpreter state, or terminate the process that
+hosts the extension.
+
+These rules are difficult to enforce for two reasons. First, the relevant
+information is distributed across the Python/C API reference manual. The
+correct action depends on details such as whether an API returns a new or
+borrowed reference, steals an argument, preserves an exception, or pairs with
+a specific release operation. Second, compliance is path-sensitive. A newly
+created object can be returned on one path, transferred to a container on a
+second path, and require an explicit decrement on every remaining path. A
+cleanup label that is correct for an owned reference can release a borrowed
+reference on another branch. The defect is therefore not characterized by an
+isolated call or a fixed API pair.
+
+Prior Python/C analyzers make important progress on reference-count errors.
+Pungi transforms reference-count behavior into affine programs
+\cite{pungi2014}, while PyRefcon tracks both reference counts and object
+lifecycle states with symbolic execution \cite{pyrefcon2023}. These analyses
+target reference management and require detailed models of API and program
+behavior. They do not provide a common representation for the broader set of
+Python/C API requirements, including error-state discipline, allocator
+agreement, buffer lifetime, numeric conversion, garbage-collection protocols,
+and capsule metadata. General native-code analyzers cover some low-level
+defects but lack the ownership and interpreter-state semantics that determine
+whether a Python/C API use is correct.
+
+Large language models offer a complementary ability to reason about source
+code and natural-language specifications. Unconstrained bug finding, however,
+asks a model to infer the relevant property, identify the program object, trace
+the paths, and judge the violation in one step. This formulation makes reports
+difficult to audit and exposes the result to unsupported bug hypotheses.
+Recent hybrid systems improve practical static analysis with model reasoning
+\cite{li2024llmstatic}, and specification-guided systems decompose external
+requirements before checking code \cite{safe4u2025,rfcaudit2025}. The open
+question for Python native extensions is how to formulate the API-specific
+checking task so that static analysis and model reasoning have separate,
+auditable roles.
+
+We make the observation that a Python/C API requirement can be represented as
+a \emph{safety obligation} together with explicit \emph{discharge
+conditions}. An API use creates an obligation for a program object or runtime
+state. The obligation is safe only when every relevant path satisfies an
+admissible discharge condition. For example, a new reference satisfies its
+ownership obligation when the path releases it, transfers it to an API that
+steals ownership, or returns it to the caller. This representation states what
+must hold without prescribing one program-analysis technique.
+
+Based on this observation, we develop \tool. An offline construction process
+extracts normative requirements and correct usage alternatives from CPython
+documentation and real bug cases. The resulting specification contains 13
+obligation categories and 41 discharge conditions. At detection time,
+lightweight static analysis finds Python/C API call sites, binds them to
+obligations, and collects the associated program objects. Fifteen syntactic
+patterns implemented by the static analyzer prune obligation instances that
+lack a suspicious shape. These patterns affect analysis cost only and are not
+part of the obligation semantics. For each retained instance, a large language
+model receives the enclosing function, the obligation, and its discharge conditions.
+The model identifies the trigger, enumerates relevant exits, checks each
+condition, and returns a structured verdict and evidence.
+
+We evaluate \tool through three research questions. The in-the-wild study
+audits 104 high-confidence reports from widely used Python extension projects.
+Eighty-six reports are real previously unknown defects, yielding 82.7\%
+precision, and 45 findings were confirmed by project maintainers. The baseline
+study reproduces PyRefcon and audits 80 deduplicated findings; it analyzes
+why PyRefcon achieves only 7.5\% precision and examines the five
+PyRefcon-only true positives to expose the boundary between Python/C API
+obligations and generic C memory safety. Finally, the design study measures
+the cost reduction from static pattern-based pruning and ablates the
+chain-of-thought discharge step and the discharge-condition list to quantify
+their individual contributions to bug recall.
+
+This paper makes the following contributions:
+
+\begin{itemize}
+  \item We formulate Python/C API correctness as dischargeable safety
+  obligations and construct a specification with 13 obligation categories
+  and 41 discharge conditions.
+  \item We design and implement \tool, which combines static obligation
+  binding and 15 pattern-based pruning rules with structured, path-oriented
+  LLM checking and evidence-bearing reports.
+  \item We evaluate \tool on real Python native extensions, find 86 previously
+  unknown bugs at 82.7\% precision, compare with the closest reproducible
+  analyzer, and isolate the effects of pruning and structured checking.
+\end{itemize}

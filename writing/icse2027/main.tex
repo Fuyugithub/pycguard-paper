@@ -1,0 +1,70 @@
+\documentclass[10pt,conference]{IEEEtran}
+
+\usepackage[T1]{fontenc}
+\usepackage{cite}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage[table]{xcolor}
+\usepackage{url}
+\usepackage{listings}
+\usepackage{xspace}
+\usepackage{tikz}
+
+\lstset{
+  basicstyle=\fontfamily{lmtt}\selectfont\footnotesize,
+  keywordstyle=\mdseries,
+  commentstyle=\mdseries,
+  stringstyle=\mdseries,
+  identifierstyle=\mdseries,
+  columns=fullflexible,
+  breaklines=true,
+  frame=single,
+  xleftmargin=0.5em,
+  xrightmargin=0.5em
+}
+
+\newcommand{\tool}{\textsc{PyCGuard}\xspace}
+\newcommand{\so}{safety obligation}
+\newcommand{\sos}{safety obligations}
+\newcommand{\dc}{discharge condition}
+\newcommand{\dcs}{discharge conditions}
+\newcommand{\code}[1]{{\fontfamily{lmtt}\selectfont\detokenize{#1}}}
+\input{sections/abstract}
+
+\title{Finding Bugs in Python Native Extensions via Safety Obligation Checking}
+
+% ICSE 2027 Research Track uses double-anonymous review.
+% Keep author information omitted for submission.
+\author{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+\paperabstract
+\end{abstract}
+
+\begin{IEEEkeywords}
+Python native extensions, Python/C API, static analysis, large language models, bug finding
+\end{IEEEkeywords}
+
+\input{sections/introduction}
+\input{sections/background}
+\input{sections/approach}
+\input{sections/implementation}
+\input{sections/evaluation}
+\input{sections/discussion}
+\input{sections/related_work}
+\input{sections/conclusion}
+
+\IEEEtriggercmd{\relax}
+\IEEEtriggeratref{1}
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

@@ -1,0 +1,12 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+Python native extensions must satisfy dispersed, path-sensitive Python/C API
+requirements. PyCGuard represents these requirements as safety obligations
+with explicit discharge conditions, binds and prunes obligation instances with
+static analysis, and uses structured LLM reasoning to check the retained
+paths. In the current audited corpus, PyCGuard finds 86 previously unknown bugs
+among 104 high-confidence reports, with 82.7\% precision. The results support
+obligation-guided checking as a practical way to broaden native-extension bug
+detection beyond reference-count imbalance while retaining auditable scope and
+evidence.

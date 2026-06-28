@@ -1,0 +1,87 @@
+\section{Discussion and Threats to Validity}
+\label{sec:discussion}
+
+\subsection{Why Safety Obligations Help}
+
+Safety obligations give static analysis and LLM reasoning different jobs.
+Static analysis answers where a documented duty can arise and which program
+object it concerns. The LLM answers a narrower semantic question: whether the
+visible paths satisfy one of several explicit discharge conditions. This split
+avoids requiring a complete handwritten transfer model for every API and
+project helper, while preventing the model from choosing an arbitrary bug
+property after reading the code.
+
+The representation also makes reports comparable across surface forms. A
+reference returned, transferred, or decremented uses different syntax but
+resolves the same ownership duty. Conversely, a decrement can be correct for a
+new reference and unsafe for a borrowed one. Encoding the required outcome and
+its alternatives captures this distinction more directly than an isolated
+pattern.
+
+\subsection{Role of Static Pruning}
+
+Static pattern-based pruning is an analysis-cost mechanism rather than part of
+the safety semantics. This distinction matters because a suspicious pattern is
+neither necessary nor sufficient for a bug. The fallback that restores all obligations
+when every pattern misses favors retention over maximum reduction. RQ3 tests the
+remaining tradeoff by reporting both saved calls and known defects removed
+before LLM checking. If a pattern loses a true defect, the proper response is to
+extend or weaken the screen, not to redefine the obligation.
+
+\subsection{Scope and Limitations}
+
+\tool is scoped to duties induced by the Python/C API. It does not attempt to
+replace a general C/C++ memory-safety analyzer. The PyRefcon-only defects in
+RQ2 provide concrete examples: raw allocation and null-dereference invariants
+without a Python/C trigger never reach obligation binding. Extending the
+method to project-local APIs would require another specification source and a
+clear rule for composing local and CPython obligations.
+
+The current context is intraprocedural source text. Function-like macros can
+hide steal semantics, C++ destructors can hide release, and paired teardown
+functions can hide ownership transfer. These cases account for several false
+positives. Preprocessing selected macros, summarizing local helpers, and
+modeling common RAII wrappers could expose the missing discharge evidence
+without broadening the property scope.
+
+The structured checker remains an LLM-based judgment. It can omit a path,
+accept infeasible control flow, or misunderstand an API. Temperature 0 reduces
+sampling variation but does not provide determinism across hosted model
+versions. The evidence-bearing schema supports audit, not formal soundness.
+The high-confidence filter also trades report volume for review cost. The
+current precision therefore describes the surfaced high-confidence set and
+does not establish recall over all bugs or all model outputs.
+
+\subsection{Threats to Validity}
+
+\paragraph{Construct validity.}
+The main metric is precision over high-confidence reports. This metric reflects
+developer-facing audit cost but omits lower-confidence outputs and cannot
+measure missed defects. PyCGuard and PyRefcon also use different report units
+and filters. We state both units and use the comparison to study precision,
+scope, and overlap rather than relative recall.
+
+\paragraph{Internal validity.}
+Manual labels can be wrong, particularly for rare failure paths and hidden
+ownership conventions. The audit examines source context, API documentation,
+and macros or callees when needed. Maintainer feedback and fixes provide
+additional evidence for submitted reports, but feedback is not available for
+every finding. The final artifact should include report-level labels and
+rationales so that independent reviewers can challenge individual decisions.
+
+\paragraph{External validity.}
+The subjects emphasize mature scientific, machine-learning, serialization,
+networking, imaging, and system libraries. Results may not generalize to small
+extensions, closed-source code, alternative Python implementations, or binding
+frameworks that generate most native code. The obligations follow CPython 3.14
+documentation. API evolution can add triggers or change conditions, requiring
+the specification and index to be versioned.
+
+\paragraph{Reproducibility.}
+Hosted model behavior and legacy baseline toolchains can change. We report
+exact model identifiers and decoding parameters and preserve prompts and raw
+responses. The PyRefcon and CpyChecker environments are containerized, but
+compilation still depends on project headers and generated files. The
+anonymous artifact will include target manifests, containers, raw warnings,
+deduplication records, and audit labels, together with an explanation for any
+component that cannot be redistributed.

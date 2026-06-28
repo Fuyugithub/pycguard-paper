@@ -1,0 +1,250 @@
+\section{Safety Obligation Construction}
+\label{sec:construction}
+
+\subsection{Overview}
+
+The purpose of obligation construction is to turn dispersed API prose and bug
+evidence into a reusable checking specification. Construction occurs offline
+and is independent of a target project. Each specification entry records a
+trigger, the safety property induced by the trigger, the program subject, and
+the conditions that discharge the property. Detection then instantiates these
+entries at concrete API calls, as described in
+Section~\ref{sec:pipeline}.
+
+The specification contains only semantic information: a safety obligation and
+the conditions that discharge it. Operational optimizations are deliberately
+kept outside this representation. For example, the absence of a nearby
+\code{Py\_DECREF} cannot define an ownership violation because the reference
+may instead be transferred or returned. Section~\ref{sec:pipeline} introduces
+such syntactic patterns as part of static pruning.
+
+\subsection{Evidence Sources}
+
+The primary source is the CPython 3.14 Python/C API reference manual
+\cite{pythoncapi}. We inspect chapters that specify object ownership,
+reference counting, exception handling, memory allocation, buffer access,
+thread state, garbage-collection support, container iteration, argument
+conversion, and capsules. Normative statements identify the trigger and the
+required property. Notes and examples provide admissible safe outcomes. We
+also inspect real Python/C API bug cases and their fixes. Bug cases expose
+requirements that are easy to overlook in prose, interactions between
+requirements, and recurring code forms suitable for pruning. The empirical
+study of the Python/C API provides independent evidence that ownership,
+exception, and compatibility mistakes occur in extension code
+\cite{hu2020pythoncapi}.
+
+We use bug cases to refine and validate documented requirements, not to infer
+correctness from frequency. A recurring idiom is not considered safe when it
+contradicts the API documentation. Conversely, an unusual idiom can discharge
+an obligation when its path and ownership semantics satisfy the documented
+property.
+
+\subsection{Construction Procedure}
+
+The construction procedure has three steps. First, we extract a candidate
+requirement and record its triggering APIs, subject, failure mode, and cited
+documentation. For the reference-counting rule that a new reference belongs
+to its caller, for example, the trigger is a new-reference-returning API, the
+subject is its result, and the failure modes include leaks and premature
+release.
+
+Second, we normalize requirements by the safety property rather than by API
+name. APIs that create the same duty share one obligation even when their
+surface signatures differ. Requirements remain separate when they require
+different evidence. Reference ownership and null validation can therefore be
+bound to the same call without collapsing their meanings.
+
+Third, we derive discharge conditions from documented safe alternatives and
+validated fixes. Conditions are intentionally sufficient rather than
+exhaustive. An owned reference, for example, can be released on every exit,
+transferred to an ownership-consuming API, or returned to the caller. A
+condition records the semantic outcome, not one exact syntax. We merge
+conditions that establish the same outcome and retain separate conditions
+when they require different reasoning.
+
+\subsection{Safety Obligations}
+
+Table~\ref{tab:obligations} summarizes the resulting specification. The 13
+categories cover reference lifecycle, failure handling, native resources,
+type and value agreement, and runtime protocols. A single API can bind several
+categories. For example, an object-producing call can create ownership,
+null-validation, cleanup, and exception-state obligations. Conversely, one
+category can cover many APIs that share a contract.
+
+\begin{table*}[t]
+\caption{Python/C API safety obligation types and their discharge conditions.}
+\label{tab:obligations}
+\centering
+\fontsize{6.2}{6.7}\selectfont
+\setlength{\tabcolsep}{2.1pt}
+\renewcommand{\arraystretch}{1.08}
+\begin{tabularx}{\textwidth}{|>{\centering\bfseries\arraybackslash}p{2.2cm}|>{\centering\arraybackslash}p{6.5cm}|>{\centering\bfseries\arraybackslash}p{3.1cm}|X|}
+\hline
+\rowcolor{black!10}
+\rule{0pt}{2.4ex}\textbf{Obligation type} & \textbf{Obligation description} & \textbf{Discharge condition} & \multicolumn{1}{c|}{\textbf{Discharge-condition description}} \\
+\hline
+\multirow[c]{4}{=}{\centering Reference ownership} &
+\multirow[c]{4}{=}{\centering Resolve every owned reference and prevent reuse after ownership transfer.} &
+Explicit release & Release the reference on every exit path. \\
+\cline{3-4}
+& & Ownership transfer & Pass it to an API that assumes release responsibility. \\
+\cline{3-4}
+& & Return to caller & Return it as the function's new-reference result. \\
+\cline{3-4}
+& & Post-steal non-use & Do not use or release it after a steal unless first retained. \\
+\hline
+\multirow[c]{2}{=}{\centering Reference validity} &
+\multirow[c]{2}{=}{\centering Keep a borrowed reference valid at every use.} &
+Scope-safe use & Finish all uses before any operation that can invalidate it. \\
+\cline{3-4}
+& & Strong promotion & Retain it before invalidation or persistent storage. \\
+\hline
+\multirow[c]{3}{=}{\centering Null/error validation} &
+\multirow[c]{3}{=}{\centering Prove a fallible result valid before unsafe use.} &
+Dominating check & Check NULL or the error sentinel before every unsafe use. \\
+\cline{3-4}
+& & Infallible source & Obtain the value from a source infallible for this input. \\
+\cline{3-4}
+& & NULL-safe use & Use the value only in NULL-tolerant operations. \\
+\hline
+\multirow[c]{4}{=}{\centering Error propagation} &
+\multirow[c]{4}{=}{\centering Handle or propagate failures and clean resources on failing paths.} &
+Cleanup block & Release acquired resources and return an error indicator. \\
+\cline{3-4}
+& & Early return & Release resources inline before returning the error. \\
+\cline{3-4}
+& & Recovery & Clear the exception and execute an intentional fallback. \\
+\cline{3-4}
+& & NULL-safe cleanup & Initialize cleanup variables and use NULL-safe releases. \\
+\hline
+\multirow[c]{4}{=}{\centering Exception state} &
+\multirow[c]{4}{=}{\centering Resolve pending exceptions before normal API work and preserve prior state.} &
+Immediate check & Inspect exception state before a non-safe API call. \\
+\cline{3-4}
+& & Safe-only work & Perform only exception-safe operations while one is pending. \\
+\cline{3-4}
+& & Prompt resolution & Clear and recover, or return an error, before normal work. \\
+\cline{3-4}
+& & Dealloc preservation & Save and restore pre-existing state around finalization. \\
+\hline
+\multirow[c]{4}{=}{\centering Resource protocol} &
+\multirow[c]{4}{=}{\centering Pair each acquisition with its correct release and allocator domain.} &
+Matched release & Apply the matching release on every successful-acquire path. \\
+\cline{3-4}
+& & Domain consistency & Free memory through the allocator domain that created it. \\
+\cline{3-4}
+& & Failure-aware skip & Skip release when acquisition failed and returned NULL. \\
+\cline{3-4}
+& & Safe reallocation & Preserve the original pointer until reallocation succeeds. \\
+\hline
+\multirow[c]{5}{=}{\centering Post-release safety} &
+\multirow[c]{5}{=}{\centering Prevent repeated release, later access, and reentrant inconsistent state.} &
+NULL assignment & Clear the pointer immediately after releasing it. \\
+\cline{3-4}
+& & No later access & Do not read, dereference, or pass the released resource. \\
+\cline{3-4}
+& & Container-safe update & Use Py\_CLEAR or Py\_SETREF for observable members. \\
+\cline{3-4}
+& & Local-only scope & Ensure reentrant code cannot observe the released object. \\
+\cline{3-4}
+& & Buffer-alias lifetime & Finish alias reads before releasing the underlying buffer. \\
+\hline
+\multirow[c]{2}{=}{\centering Type agreement} &
+\multirow[c]{2}{=}{\centering Match API formats with C types, widths, encodings, and protocols.} &
+Format-type match & Match each format code to the corresponding C argument type. \\
+\cline{3-4}
+& & Platform width & Use format codes consistent with platform-dependent widths. \\
+\hline
+\multirow[c]{3}{=}{\centering Numeric and bounds safety} &
+\multirow[c]{3}{=}{\centering Prevent narrowing, allocation overflow, and out-of-bounds access.} &
+Range check & Check the range before narrowing or indexed access. \\
+\cline{3-4}
+& & Allocation check & Check size arithmetic for overflow before allocation. \\
+\cline{3-4}
+& & Sufficient type & Store the value in a type wide enough for the platform. \\
+\hline
+\multirow[c]{2}{=}{\centering Thread safety} &
+\multirow[c]{2}{=}{\centering Use the Python/C API under a valid interpreter-lock context.} &
+Valid context & Hold the GIL whenever invoking the Python/C API. \\
+\cline{3-4}
+& & Blocking-I/O release & Release the GIL for blocking work and reacquire it first. \\
+\hline
+\multirow[c]{3}{=}{\centering GC lifecycle} &
+\multirow[c]{3}{=}{\centering Complete allocation, tracking, traversal, clearing, and deallocation.} &
+GC allocation domain & Use matching GC-aware allocation and deallocation. \\
+\cline{3-4}
+& & Tracking protocol & Track after initialization and untrack before field clearing. \\
+\cline{3-4}
+& & Traverse and clear & Visit every owned field and clear it with Py\_CLEAR. \\
+\hline
+\multirow[c]{2}{=}{\centering Iteration integrity} &
+\multirow[c]{2}{=}{\centering Do not structurally mutate a container during iteration.} &
+Read-only body & Perform no direct or indirect mutation while iterating. \\
+\cline{3-4}
+& & Iteration copy & Iterate over a copy when the original may be mutated. \\
+\hline
+\multirow[c]{3}{=}{\centering Capsule name stability} &
+\multirow[c]{3}{=}{\centering Keep a capsule name valid and consistent throughout its lifetime.} &
+String literal & Use an immutable string literal with static lifetime. \\
+\cline{3-4}
+& & Static storage & Store the name in a static or module-lifetime constant. \\
+\cline{3-4}
+& & Destructor-managed & Free a dynamic name only in the capsule destructor. \\
+\hline
+\end{tabularx}
+\end{table*}
+
+\subsection{Discharge Conditions}
+
+Let $o$ be an obligation instance bound in function $f$, let $D(o)$ be its
+discharge conditions, and let $\Pi(o,f)$ be the relevant paths from its trigger
+to an exit or unsafe use. For the default disjunctive mode, the intended
+judgment is
+\begin{equation}
+  \mathit{Safe}(o,f) \equiv
+  \forall \pi \in \Pi(o,f),\; \exists d \in D(o): d(\pi).
+  \label{eq:discharge}
+\end{equation}
+Thus, different paths can satisfy different conditions. SO-11 uses a
+conjunctive mode because allocation, tracking, traversal, clearing, and
+deallocation are complementary aspects of one garbage-collection protocol.
+For this category, all applicable conditions must hold.
+
+Equation~\ref{eq:discharge} defines the question asked by the checker. It does
+not claim that the LLM enumerates paths soundly or proves the equation. The
+structured output records the paths and condition judgments used to reach a
+verdict so that a reviewer can inspect the reasoning.
+
+The ownership obligation in Figure~\ref{fig:motivation} has four conditions:
+explicit release, ownership transfer, return to the caller, and no use after a
+steal. On each failure path of the new-reference branch, explicit release
+holds. On the successful branch, returned arrays transfer ownership. The
+borrowed-reference branch does not create an owned reference, so its cleanup
+must not apply the release action. Binding ownership semantics to the concrete
+assignment exposes this mismatch.
+
+The same representation applies beyond ownership. Null validation can be
+discharged by a dominating check, an infallible source for the given input, or
+exclusively null-tolerant uses. A resource protocol requires matched release,
+allocator-domain agreement, and a failure-safe reallocation pattern. Capsule
+names can use literal, static, or destructor-managed storage. These conditions
+specify semantic outcomes rather than one cleanup-label name, macro, or branch
+shape, allowing equivalent C, C++, and generated-wrapper idioms.
+
+\subsection{Traceability and Evolution}
+
+Each obligation entry retains its trigger API categories, discharge
+conditions, and documentation locations in one versioned JSON record. This
+structure supports two audits. A specification audit can trace a
+property or condition back to the CPython reference chapter that motivates it.
+A detection audit can trace a report from a concrete call site to the bound SO,
+the evaluated DCs, and the final path evidence. Keeping both links is necessary
+because a correct API rule can still be bound to the wrong subject, and a
+correct binding can still receive an incorrect path judgment.
+
+The specification is designed to evolve with CPython. A new API that follows
+an existing ownership or error convention usually adds a trigger without
+creating a new SO. A new semantic requirement adds a condition or category
+only when the existing vocabulary cannot express its safe outcomes. Static
+pruning patterns are versioned separately in the analyzer, so refining a
+heuristic does not change the meaning of past obligations.

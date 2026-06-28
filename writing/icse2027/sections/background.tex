@@ -1,0 +1,89 @@
+\section{Background and Motivation}
+\label{sec:background}
+
+\subsection{Python Native Extensions}
+
+CPython exposes a C interface for defining modules, types, and functions and
+for manipulating interpreter objects. A native function commonly parses
+Python arguments, creates or accesses \code{PyObject} values, calls other
+Python/C APIs, and returns either a Python object or an error indicator. The
+interface uses conventions rather than a C type system to encode many safety
+properties. A \emph{new reference} transfers ownership to the caller, while a
+\emph{borrowed reference} remains owned elsewhere. Some APIs steal ownership
+of an argument. Most object-producing APIs return \code{NULL} on failure and
+set the thread-local exception indicator. Other APIs use integer sentinels,
+and several resource APIs require a matching release operation
+\cite{pythoncapi}.
+
+The conventions interact. If \code{PyTuple_New} returns \code{NULL}, native
+code must avoid dereferencing the result, preserve the pending exception, and
+release objects acquired earlier on that path. If \code{PyTuple_SetItem}
+succeeds, it steals an item reference, so a later decrement can access a freed
+object. Correctness therefore depends on the API contract, the program object
+to which the contract applies, and the path between acquisition and exit.
+
+\subsection{Python/C API Safety Requirements}
+
+We call a requirement \emph{API-induced} when a Python/C API call or a
+Python-runtime callback creates the relevant duty. Reference ownership is the
+most visible example, but the same structure appears in other parts of the
+interface. A successful \code{PyObject\_GetBuffer} call creates a duty to call
+\code{PyBuffer\_Release}; a fallible conversion creates a duty to check its
+sentinel before use; releasing the global interpreter lock creates a duty to
+reacquire it before another Python/C API call; and a garbage-collected type
+creates a multi-part lifecycle duty for allocation, tracking, traversal,
+clearing, and deallocation.
+
+Three properties make these requirements unsuitable for simple call-pair
+matching. A requirement can admit several correct outcomes, such as release,
+transfer, or return. The appropriate outcome can differ across paths. In
+addition, a syntactically present action can be semantically wrong, as when a
+cleanup block decrements a borrowed reference or frees memory with an
+allocator from another domain. These properties motivate an explicit
+representation of both the duty and its admissible discharge conditions.
+
+\subsection{Motivating Example}
+
+Figure~\ref{fig:motivation} presents a defect found in the SciPy
+\code{fitpack\_sphere} wrapper. The function receives \code{tt} and \code{tp}
+from \code{PyArg\_ParseTuple}. When \code{iopt == -1}, it assigns these
+borrowed references to \code{ap\_tt} and \code{ap\_tp}. A later validation
+failure reaches the shared cleanup block, which decrements both variables.
+The cleanup is correct when \code{iopt == 0} because that branch creates new
+arrays, but it is unsafe for the borrowed-reference branch. The decrement can
+prematurely release an object still owned by the caller.
+
+\begin{figure}[t]
+\begin{lstlisting}[language=C,numbers=left,firstnumber=1]
+if (iopt == -1) {
+    ap_tt = tt;                 // borrowed
+    ap_tp = tp;                 // borrowed
+} else if (iopt == 0) {
+    ap_tt = PyArray_SimpleNew(...); // new
+    if (ap_tt == NULL) goto fail;
+    ap_tp = PyArray_SimpleNew(...); // new
+    if (ap_tp == NULL) goto fail;
+}
+if (invalid_dimensions) goto fail;
+...
+fail:
+Py_XDECREF(ap_tt);
+Py_XDECREF(ap_tp);
+return NULL;
+\end{lstlisting}
+\caption{Path-dependent ownership in \code{fitpack\_sphere}. The cleanup
+releases owned arrays created by the second branch but also releases borrowed
+arrays assigned by the first branch.}
+\label{fig:motivation}
+\end{figure}
+
+A source-level pattern such as ``assignment followed by decrement'' cannot
+distinguish the branches. Tracking only the final reference-count delta is
+also insufficient unless the analysis recovers the ownership semantics of
+both assignments and the feasibility of each cleanup path. Under our
+formulation, the two assignments bind a reference-ownership obligation. The
+new-reference branch is discharged by cleanup on failure and ownership
+transfer on success. The borrowed-reference branch has no owned reference to
+release, and the decrement violates the post-acquisition condition. The
+example illustrates why the checker must combine API semantics with
+path-specific discharge reasoning.

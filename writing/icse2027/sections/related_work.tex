@@ -1,0 +1,78 @@
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Python Native-Extension Analysis}
+
+Pungi models Python/C reference-count operations as affine programs
+\cite{pungi2014}; CpyChecker tracks objects and expected counts over GCC paths
+\cite{cpychecker}; and PyRefcon adds lifecycle states, nullity, and C++ monitors
+\cite{pyrefcon2023}. PyCGuard instead covers 13 API obligation categories and
+represents correctness as alternative discharge conditions. PyRefcon remains
+the closest reproducible baseline because its lifecycle scope overlaps SO-01,
+SO-02, and SO-07.
+
+Jinn synthesizes dynamic state-machine checkers for JNI and Python/C rules
+\cite{jinn2010}. Other work characterizes Python/C API evolution and bugs
+\cite{hu2020pythoncapi}, jointly analyzes Python and C with shared abstract
+domains \cite{monat2021multilanguage}, or diagnoses inefficient boundary
+interactions \cite{pieprof2021}. PyCGuard targets statically visible native-side
+API duties rather than executed violations, language interaction errors, or
+performance.
+
+General reference-count work uses shallow-alias analysis, compositional
+verification, path-pair inconsistency, or two-dimensional consistency
+\cite{lal2010refcount,referee2009,rid2016,cid2021}. Resource analyses detect
+path-sensitive leaks, infer acquire/release pairs, track C++ smart-pointer heap
+protocols, or identify disordered cleanup
+\cite{smoke2019,sinkfinder2020,smartpointer2021,hero2021}. These techniques
+inform PyCGuard's path and resource reasoning but omit CPython ownership,
+exception-state, garbage-collection, and API-specific discharge semantics.
+
+\subsection{Cross-Language Interface Analysis}
+
+JNI analyses detect resource and typestate errors \cite{kondoh2008jni}, analyze
+exceptional paths \cite{li2009jni,li2014jniexception}, prune before fine-grained
+exception checking \cite{jet2011}, or infer types across FFI boundaries
+\cite{furr2008ffi}. They demonstrate the need for native-side models but each
+targets a narrower family of properties.
+
+Related systems detect type and lifetime errors in JavaScript bindings
+\cite{brown2017jsbindings}, coordinate garbage collection across components
+\cite{degenbaev2018crosscomponentgc}, or track polyglot vulnerability flows
+\cite{charon2025}. PyCGuard checks CPython API conformance even when both trigger
+and consequence remain in native code.
+
+RustBelt formalizes unsafe abstractions \cite{rustbelt2018}; empirical studies
+characterize unsafe usage and requirements
+\cite{unsaferustoopsla2020,rustsafetypldi2020,unsafeachilles2024}; and Rudra,
+MirChecker, SafeDrop, and subsequent analyses detect unsafe-code patterns and
+safety bugs \cite{rudra2021,mirchecker2021,safedrop2023,rustsafetytse2024,dontpanic2025}.
+CPython lacks an equivalent language-level discipline, so PyCGuard recovers
+heterogeneous protocols from documentation and bugs.
+
+\subsection{LLM-Assisted Bug Detection}
+
+Learned vulnerability detectors are sensitive to dataset construction and
+generalization \cite{chakraborty2022deepvuln,steenhoek2023vuln}, and standalone
+LLMs remain unreliable vulnerability reasoners \cite{ullah2024llmvuln}.
+GPTScan instead combines GPT with program analysis \cite{gptscan2024}, supporting
+PyCGuard's use of explicit program facts and properties.
+
+Hybrid systems validate static warnings \cite{li2024llmstatic}, infer taint
+specifications for whole-repository analysis \cite{iris2025}, couple LLMs with
+bidirectional taint analysis \cite{staint2025}, or derive binary-analysis
+semantics \cite{latte2025}. PyCGuard starts from an audited Python/C obligation
+vocabulary and delegates only candidate path adjudication to the model.
+
+Data-flow facts can constrain LLM bug judgments \cite{wang2024dataflowbug};
+LLMDFA decomposes data-flow reasoning and externally validates path feasibility
+\cite{llmdfa2024}; DAInfer extracts aliasing specifications from documentation
+\cite{dainfer2024}; and KNighter synthesizes static checkers from patches
+\cite{knighter2025}. PyCGuard likewise narrows reasoning, but keeps obligations
+and pruning rules explicit and auditable.
+
+Safe4U decomposes unsafe Rust contracts before checking wrappers
+\cite{safe4u2025}, while RFCAudit and RFCParser interpret protocol documents
+\cite{rfcaudit2025,rfcparser2025}. PyCGuard instead normalizes many API statements
+and real bugs into reusable obligation types with alternative discharge
+conditions and separate pruning patterns.
