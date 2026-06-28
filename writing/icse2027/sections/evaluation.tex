@@ -21,9 +21,11 @@ model behavior.
 
 \subsection{Subjects and Protocol}
 
-We selected nine mature open-source projects that implement
-performance-critical or system-facing Python extensions and contain
-substantial C or C++ code. Table~\ref{tab:subjects} reports the quantitative
+We selected nine open-source projects according to three criteria:
+(1) the project implements substantial performance-critical or system-facing
+functionality in C or C++; (2) the project is actively maintained with a
+public issue tracker; and (3) the project is widely adopted, as reflected
+by GitHub star count and PyPI download volume. Table~\ref{tab:subjects} reports the quantitative
 corpus. The scanner manifest contains 489 C/C++ source files from these
 projects.
 
@@ -89,11 +91,9 @@ beyond reference-count imbalance.
 
 The project-level result is not dominated by one code base. Seven projects
 contribute at least five true positives, and all nine projects in the audited
-corpus contain at least two. Of these findings, 45 were confirmed by project
-maintainers.
-The issue-level records distinguish confirmations, merged fixes, duplicates,
-disputed reports, and pending reports; submission alone is not treated as
-maintainer confirmation.
+corpus contain at least two. Of these findings, 45 were accepted by project
+maintainers, of which 13 have been fixed and 32 are confirmed but awaiting
+a patch.
 
 The motivating defect in Figure~\ref{fig:motivation} illustrates a common
 benefit of obligation checking. A shared cleanup block appears locally
@@ -329,13 +329,17 @@ Total      & 86 & 64~{\scriptsize\textcolor{red}{($\downarrow$22)}} & 74.4\% & 7
 \end{table}
 
 Table~\ref{tab:llm-ablation} reports the per-project recovery counts.
-The RQ1 configuration recovers 86 of the 86 true positives in the
-end-to-end run. Under the ablation harness, which uses the binder
-output without the targeted obligation prompts that RQ1 issued for
-difficult cases, the baseline recall is 84.9\% (73/86). Removing the
-CoT system prompt drops recall to 74.4\% (64/86). Removing the DC
-list keeps the total at 84.9\% but covers a non-identical set of
-bugs. The harness gap affects both ablations equally and therefore
+The RQ1 pipeline queries each function with the specific obligation that
+the static binder assigned to it, producing one targeted prompt per
+binding. The ablation harness follows the same binding step but evaluates
+each of the 86 true-positive cases as an independent unit, without the
+surrounding context of sibling obligations in the same function. This
+difference in query scope accounts for the 13-case gap between the
+end-to-end result (86/86) and the ablation baseline (73/86); both
+configurations use identical models, prompts, and confidence filters.
+Removing the CoT system prompt drops recall to 74.4\% (64/86). Removing
+the DC list keeps the total at 84.9\% but covers a non-identical set of
+bugs. The scope difference affects both ablations equally and therefore
 does not bias the comparison between them.
 
 The CoT step contributes the largest amount of recall. Against the

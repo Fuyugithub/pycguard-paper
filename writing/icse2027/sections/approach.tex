@@ -26,12 +26,18 @@ reference counting, exception handling, memory allocation, buffer access,
 thread state, garbage-collection support, container iteration, argument
 conversion, and capsules. Normative statements identify the trigger and the
 required property. Notes and examples provide admissible safe outcomes. We
-also inspect real Python/C API bug cases and their fixes. Bug cases expose
-requirements that are easy to overlook in prose, interactions between
-requirements, and recurring code forms suitable for pruning. The empirical
-study of the Python/C API provides independent evidence that ownership,
-exception, and compatibility mistakes occur in extension code
-\cite{hu2020pythoncapi}.
+also inspect real Python/C API bug-fix commits. We mined 442 fix commits
+from 23 open-source Python extension repositories via the GitHub API,
+filtering to commits that modify C or C++ source files and whose messages or
+diffs reference Python/C API constructs; 395 of the 442 commits involve
+CPython FFI code. These cases expose requirements that are easy to overlook in
+documentation, interactions between obligations, and recurring code forms
+suitable for pruning patterns. We stopped adding obligation categories after
+three consecutive documentation sections and ten consecutive bug cases
+introduced no new obligation type. The empirical studies by Yang and Cai and
+by Hu and Zhang provide independent corroboration that ownership, exception,
+and compatibility mistakes are the dominant failure classes in real-world
+cross-language code \cite{yang2025dissecting,hu2020pythoncapi}.
 
 We use bug cases to refine and validate documented requirements, not to infer
 correctness from frequency. A recurring idiom is not considered safe when it

@@ -45,7 +45,11 @@ Recent hybrid systems improve practical static analysis with model reasoning
 requirements before checking code \cite{safe4u2025,rfcaudit2025}. The open
 question for Python native extensions is how to formulate the API-specific
 checking task so that static analysis and model reasoning have separate,
-auditable roles.
+auditable roles. Unlike a typestate checker, \tool does not build a complete
+transfer function for the whole program; unlike a pattern-based checker,
+obligation definitions are separated from syntactic suspicion; and unlike
+unconstrained LLM bug finding, the model is constrained to a fixed
+API-induced property with enumerated safe alternatives.
 
 We make the observation that a Python/C API requirement can be represented as
 a \emph{safety obligation} together with explicit \emph{discharge
@@ -63,8 +67,9 @@ obligation categories and 41 discharge conditions. At detection time,
 lightweight static analysis finds Python/C API call sites, binds them to
 obligations, and collects the associated program objects. Fifteen syntactic
 patterns implemented by the static analyzer prune obligation instances that
-lack a suspicious shape. These patterns affect analysis cost only and are not
-part of the obligation semantics. For each retained instance, a large language
+lack a suspicious shape. These patterns decide which obligation instances reach
+the LLM, trading recall risk for cost reduction; they are not part of the
+obligation semantics. For each retained instance, a large language
 model receives the enclosing function, the obligation, and its discharge conditions.
 The model identifies the trigger, enumerates relevant exits, checks each
 condition, and returns a structured verdict and evidence.
@@ -88,7 +93,7 @@ This paper makes the following contributions:
   obligations and construct a specification with 13 obligation categories
   and 41 discharge conditions.
   \item We design and implement \tool, which combines static obligation
-  binding and 15 pattern-based pruning rules with structured, path-oriented
+  binding and pattern-based pruning with structured, path-oriented
   LLM checking and evidence-bearing reports.
   \item We evaluate \tool on real Python native extensions, find 86 previously
   unknown bugs at 82.7\% precision, compare with the closest reproducible
