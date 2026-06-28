@@ -38,8 +38,8 @@ The current context is intraprocedural source text. Function-like macros can
 hide steal semantics, C++ destructors can hide release, and paired teardown
 functions can hide ownership transfer. Of the 18 false positives, 2 are caused
 by macro expansion, 2 by C++ RAII or destructor cleanup, and 2 by
-interprocedural teardown helpers; the remaining 12 require richer
-ownership-semantics knowledge to resolve. Preprocessing selected macros,
+interprocedural teardown helpers; the remaining 12 require richer API-semantics, control-flow
+feasibility, and error-state modeling. Preprocessing selected macros,
 summarizing local helpers, and modeling common RAII wrappers could expose the
 missing discharge evidence without broadening the property scope.
 

@@ -75,7 +75,8 @@ starts from tool reports rather than a complete defect oracle, we do not claim
 recall for the in-the-wild corpus.
 
 \paragraph{Baseline protocol.}
-We run PyRefcon over all C/C++ source files accepted by its compilation
+We attempt to run PyRefcon over all 489 C/C++ source files and retain
+warnings from files accepted by its compilation
 pipeline. We parse 224 HTML warnings and group warnings with the same project,
 file, function, and bug type into 80 audit units. Each unit is inspected using
 the reported trace and source context. This deduplication prevents repeated
@@ -228,8 +229,10 @@ the prompt by its effect on bug recall across the same 86 cases.
 Table~\ref{tab:pruning-cost} reports per-project token usage, dollar
 cost, and wall-clock time for a controlled replay of the 86 RQ1
 true-positive cases with pruning disabled and enabled. The same
-project/file/function/SO targets are used in both configurations;
-differences in token usage and time are therefore attributable to
+project/file/function cases are used in both configurations; the
+unpruned configuration sends all bound SOs for those cases to the LLM,
+whereas the pruned configuration filters them before checking.
+Differences in token usage and time are therefore attributable to
 pruning rather than to different report populations. Cost uses
 Anthropic's published Claude Sonnet 4 pricing
 (\$3 / MTok input, \$15 / MTok output). The high-confidence filter and
@@ -272,7 +275,7 @@ in cost and 30\% in time. The driver is a sharp drop at the
 binding stage: pruning eliminates a substantial fraction of bound
 obligations per project before any model call, so
 the LLM never pays the per-call overhead for cases it would
-ultimately answer SAFE. The end-to-end reduction is smaller than the
+ultimately answer SAFE. The replay-level reduction is smaller than the
 binding-stage reduction because the obligations that survive pruning
 are harder on average; the model emits longer structured rationale on them,
 which cost more output tokens per call. Pruning therefore
@@ -341,7 +344,9 @@ Total      & 86 & 64~{\scriptsize\textcolor{red}{($\downarrow$22)}} & 74.4\% & 7
 Table~\ref{tab:llm-ablation} reports the per-project recovery counts.
 The ablation evaluates each of the 86 true-positive cases as an
 independent unit under two ablated configurations and otherwise holds
-the pipeline fixed.
+the pipeline fixed. \emph{Target} is the number of cases recovered by
+the full PyCGuard configuration in the end-to-end run; all 86 are
+recovered, so Target equals the RQ1 true-positive count.
 
 The CoT step is the primary driver of recall. Without it, the tool
 finds only 64 of the 86 known bugs, missing 22. These losses
@@ -378,6 +383,6 @@ non-overlapping findings are generic C memory errors outside the
 Python/C API obligation scope. For RQ3, static pattern-based pruning
 cuts the LLM cost by 33.3\% and wall-clock time by 30\% on the 86
 true-positive cases while preserving every audited finding, and the
-prompt ablation shows that removing the CoT step drops recall from
-84.9\% to 74.4\% while removing the discharge-condition list shifts
-the recovered set without changing the total recall.
+prompt ablation shows that removing the CoT step drops recall to
+74.4\% (64/86) and removing the discharge-condition list drops recall
+to 84.9\% (73/86), each relative to the full configuration.
