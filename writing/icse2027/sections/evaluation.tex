@@ -60,6 +60,9 @@ RQ1 uses the configuration in Section~\ref{sec:pipeline}, including
 high-confidence report filter. The analysis unit is one project, file,
 function, and SO tuple. Several unsafe effects in one tuple are counted as one
 report. We do not use lower-confidence violations to calculate precision.
+Medium- and low-confidence outputs are suppressed and not audited;
+all precision claims in this paper are restricted to the 104
+high-confidence reports.
 
 \paragraph{Manual audit.}
 For each report, we inspect the complete function, the reported path, the
@@ -215,20 +218,24 @@ RQ3 quantifies the value of two design decisions that govern the
 end-to-end behavior of \tool. The first is static pattern-based
 pruning, which decides how many obligations reach the LLM. The second
 is the obligation prompt, which decides how the LLM reasons about each
-obligation that it does see. We measure pruning by its effect on
-checking cost across all nine projects, and we measure the prompt by
-its effect on bug recall across the 86 RQ1 true positives.
+obligation that it does see. We measure pruning by its marginal effect
+on checking cost over the 86 manually validated true-positive cases;
+this controlled replay holds the analyzed function/SO set fixed and
+therefore isolates the cost contribution of static pruning. We measure
+the prompt by its effect on bug recall across the same 86 cases.
 
 \paragraph{Cost effect of pruning.}
 Table~\ref{tab:pruning-cost} reports per-project token usage, dollar
-cost, and wall-clock time when \tool is run end-to-end on each project
-with pruning disabled and re-run with pruning enabled. We instrument
-the pipeline to count input and output tokens at every LLM call. Cost
-uses Anthropic's published Claude Sonnet 4 pricing
-(\$3 / MTok input, \$15 / MTok output). Wall-clock time follows the
-project-level scan time. The high-confidence filter and the early-stop
-rule from Section~\ref{sec:pipeline} are kept enabled in both
-configurations so that the comparison reflects only the pruning step.
+cost, and wall-clock time for a controlled replay of the 86 RQ1
+true-positive cases with pruning disabled and enabled. The same
+project/file/function/SO targets are used in both configurations;
+differences in token usage and time are therefore attributable to
+pruning rather than to different report populations. Cost uses
+Anthropic's published Claude Sonnet 4 pricing
+(\$3 / MTok input, \$15 / MTok output). The high-confidence filter and
+the early-stop rule from Section~\ref{sec:pipeline} are kept enabled
+in both configurations so that the comparison reflects only the
+pruning step.
 
 \begin{table*}[t]
 \caption{Per-project LLM cost on the 86 true positives with and without static pruning.}
@@ -280,9 +287,9 @@ conversion helpers account for most of the unpruned obligation count.
 PyTorch shows the smallest reduction (11.8\%) because its
 mixed-language RAII helpers survive pruning at a higher rate; the
 surviving obligations are in larger, more complex functions, and the
-CoT chains on them are longer. Even there, every audited true
+structured rationale on them is longer. Even there, every audited true
 positive is retained, confirming that the risk indicator set
-does not discard evidence of real defects.
+does not discard evidence for any of the audited true-positive cases.
 
 \paragraph{Bug recovery effect of CoT prompting and Discharge
 Conditions.}
@@ -299,7 +306,10 @@ configuration (CoT prompt with DC list). The backend, temperature, max
 tokens, high-confidence filter, and obligation binder are identical
 across all configurations. We classify a case as \emph{recovered} when
 the model returns parseable JSON with \code{verdict=VIOLATED} and
-\code{confidence=high}.
+\code{confidence=high}. This ablation is not a precision experiment:
+because it is run only on independently audited true positives, it
+measures how often each prompt variant preserves known bug reports; it
+does not characterize false-positive behavior or deployment precision.
 
 \begin{table}[t]
 \caption{Per-project bug recall on the 86 true positives under two ablations.}
@@ -374,13 +384,14 @@ that the DC list reshapes the checking behavior rather than expanding
 it.
 
 The two ablations together support the central design claim. The
-chain-of-thought walk is the primary source of recall, recovering 9
-more bugs than direct prompting on the same 86-case set. The discharge
-conditions sharpen the specificity of each individual check without
-trading away recall. Removing either component degrades the detector in a
-distinct and complementary way, which is consistent with their
-separate roles in the prompt: CoT governs path coverage, and the DC
-list governs violation criteria.
+chain-of-thought walk is the primary source of true-positive recovery,
+recovering 9 more cases than direct prompting on the same fixed set.
+The discharge conditions sharpen the specificity of each individual
+check without trading away recall. Removing either component degrades
+true-positive recovery on this fixed set in a distinct and
+complementary way, which is consistent with their separate roles in
+the prompt: CoT governs path coverage, and the DC list governs
+violation criteria.
 
 \paragraph{Answers to the research questions.}
 For RQ1, \tool finds 86 previously unknown bugs among 104 audited
