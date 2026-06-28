@@ -9,8 +9,9 @@ Section~\ref{sec:construction}. The online phase consumes a native-extension
 project and produces auditable bug reports. Static analysis first discovers
 candidate functions, binds API calls to obligations, and prunes obligation
 instances using syntactic patterns. Structured LLM checking then
-tests every retained obligation against its discharge conditions. Only
-high-confidence violated judgments become reports.
+evaluates retained obligations in deterministic order, stopping at the
+first high-confidence violation per function. Only high-confidence
+violated judgments become reports.
 
 \begin{figure*}[t]
 \centering
@@ -118,7 +119,7 @@ whether any known defect loses its $(f,o)$ pair.
 
 \subsection{Structured Discharge Checking}
 
-For every retained pair, the checker constructs a prompt with four components:
+For each retained pair that reaches the LLM, the checker constructs a prompt with four components:
 the SO description, its check mode, the complete DC list, and the full
 enclosing function. We use the full function because exits, cleanup labels,
 and ownership transfers often lie outside a local statement slice. Line
@@ -166,8 +167,7 @@ expected JSON object. Network failures are retried with increasing delays.
 JSON recovery removes limited trailing-comma errors and can recover an explicit
 verdict from otherwise malformed text; all other responses remain unknown.
 Recovery status and raw text are preserved so that a parsed verdict does not
-hide format noncompliance. Malformed and unknown rates are reported separately
-from detection quality.
+hide format noncompliance.
 
 \subsection{Report Generation}
 

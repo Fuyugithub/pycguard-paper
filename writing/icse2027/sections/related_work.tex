@@ -8,8 +8,9 @@ Pungi models Python/C reference-count operations as affine programs
 \cite{cpychecker}; and PyRefcon adds lifecycle states, nullity, and C++ monitors
 \cite{pyrefcon2023}. PyCGuard instead covers 13 API obligation categories and
 represents correctness as alternative discharge conditions. PyRefcon remains
-the closest reproducible baseline because its lifecycle scope overlaps SO-01,
-SO-02, and SO-07.
+the closest reproducible baseline because its lifecycle scope overlaps
+with the reference ownership, reference validity, and post-release
+safety obligations.
 
 Jinn synthesizes dynamic state-machine checkers for JNI and Python/C rules
 \cite{jinn2010}. Other work characterizes Python/C API evolution and bugs

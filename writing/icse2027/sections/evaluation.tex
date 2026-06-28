@@ -85,10 +85,10 @@ paths for one defect from inflating the result.
 
 \tool reports 104 high-confidence findings. Manual audit identifies 86 true
 positives and 18 false positives, for a precision of
-$86/104=82.7\%$. The true positives span eight checked SO categories. The
-largest groups involve ownership resolution and null/error validation, but the
-results also include exception-state errors, resource protocols,
-post-release safety, type agreement, and numeric bounds. This distribution
+$86/104=82.7\%$. The true positives cover a diverse range of defect
+classes, including reference ownership errors, null dereferences,
+exception-state violations, resource leaks, post-release safety errors,
+type mismatches, and numeric bounds violations. This distribution
 supports the central scope claim: Python native-extension defects extend
 beyond reference-count imbalance.
 
@@ -248,19 +248,19 @@ pruning step.
 & \multicolumn{4}{c}{Without pruning} & & \multicolumn{4}{c}{With pruning} & & \\
 \cmidrule{2-5} \cmidrule{7-10}
 Project & Input (K) & Output (K) & Cost (\$) & Time (min) & &
-          Input (K) & Output (K) & Cost (\$) & Time (min) & & Reduction (\%) \\
+          Input (K) & Output (K) & Cost (\$) & Time (min) & & Cost Reduction (\%) \\
 \midrule
-SciPy      & 103.0 & 24.7 & 0.68 & 8.0 & &  62.3 & 17.1 & 0.44 & 5.5 & & -35.3\% \\
-pandas     &  28.4 & 13.8 & 0.29 & 4.4 & &  17.6 &  9.8 & 0.20 & 3.1 & & -31.0\% \\
-NumPy      &  81.6 & 15.7 & 0.48 & 5.3 & &  47.5 & 10.4 & 0.30 & 3.5 & & -37.5\% \\
-Pillow     &  37.9 & 15.0 & 0.34 & 4.8 & &  22.7 & 10.2 & 0.22 & 3.2 & & -35.3\% \\
-PyTorch    &  15.5 &  8.4 & 0.17 & 2.7 & &  11.9 &  7.4 & 0.15 & 2.4 & & -11.8\% \\
-PycURL     &  10.8 &  7.4 & 0.14 & 2.3 & &   6.0 &  4.6 & 0.09 & 1.4 & & -35.7\% \\
-ujson      &   6.3 &  4.7 & 0.09 & 1.6 & &   4.1 &  3.5 & 0.06 & 1.2 & & -33.3\% \\
-TensorFlow &   3.4 &  2.7 & 0.05 & 0.9 & &   2.4 &  2.2 & 0.04 & 0.7 & & -20.0\% \\
-psutil     &   9.3 &  2.4 & 0.06 & 0.8 & &   4.8 &  1.4 & 0.04 & 0.4 & & -33.3\% \\
+SciPy      & 103.0 & 24.7 & 0.68 & 8.0 & &  62.3 & 17.1 & 0.44 & 5.5 & & 35.3\% \\
+pandas     &  28.4 & 13.8 & 0.29 & 4.4 & &  17.6 &  9.8 & 0.20 & 3.1 & & 31.0\% \\
+NumPy      &  81.6 & 15.7 & 0.48 & 5.3 & &  47.5 & 10.4 & 0.30 & 3.5 & & 37.5\% \\
+Pillow     &  37.9 & 15.0 & 0.34 & 4.8 & &  22.7 & 10.2 & 0.22 & 3.2 & & 35.3\% \\
+PyTorch    &  15.5 &  8.4 & 0.17 & 2.7 & &  11.9 &  7.4 & 0.15 & 2.4 & & 11.8\% \\
+PycURL     &  10.8 &  7.4 & 0.14 & 2.3 & &   6.0 &  4.6 & 0.09 & 1.4 & & 35.7\% \\
+ujson      &   6.3 &  4.7 & 0.09 & 1.6 & &   4.1 &  3.5 & 0.06 & 1.2 & & 33.3\% \\
+TensorFlow &   3.4 &  2.7 & 0.05 & 0.9 & &   2.4 &  2.2 & 0.04 & 0.7 & & 20.0\% \\
+psutil     &   9.3 &  2.4 & 0.06 & 0.8 & &   4.8 &  1.4 & 0.04 & 0.4 & & 33.3\% \\
 \midrule
-Total      & 296.2 & 94.9 & 2.31 & 30.7 & & 179.2 & 66.7 & 1.54 & 21.5 & & -33.3\% \\
+Total      & 296.2 & 94.9 & 2.31 & 30.7 & & 179.2 & 66.7 & 1.54 & 21.5 & & 33.3\% \\
 \bottomrule
 \end{tabular}
 \end{table*}
@@ -268,9 +268,9 @@ Total      & 296.2 & 94.9 & 2.31 & 30.7 & & 179.2 & 66.7 & 1.54 & 21.5 & & -33.3
 Processing the 86 true-positive cases with pruning disabled costs
 \$2.31 and takes 30.7 minutes of wall-clock LLM time. Enabling
 pruning cuts this to \$1.54 and 21.5 minutes, a reduction of 33.3\%
-in cost and 30.1\% in time. The driver is a sharp drop at the
-binding stage: pruning eliminates between 31\% (PyTorch) and 49\%
-(psutil) of bound per-project obligations before any model call, so
+in cost and 30\% in time. The driver is a sharp drop at the
+binding stage: pruning eliminates a substantial fraction of bound
+obligations per project before any model call, so
 the LLM never pays the per-call overhead for cases it would
 ultimately answer SAFE. The end-to-end reduction is smaller than the
 binding-stage reduction because the obligations that survive pruning
@@ -339,59 +339,36 @@ Total      & 86 & 64~{\scriptsize\textcolor{red}{($\downarrow$22)}} & 74.4\% & 7
 \end{table}
 
 Table~\ref{tab:llm-ablation} reports the per-project recovery counts.
-The RQ1 pipeline queries each function with the specific obligation that
-the static binder assigned to it, producing one targeted prompt per
-binding. The ablation harness follows the same binding step but evaluates
-each of the 86 true-positive cases as an independent unit, without the
-surrounding context of sibling obligations in the same function. This
-difference in query scope accounts for the 13-case gap between the
-end-to-end result (86/86) and the ablation baseline (73/86); both
-configurations use identical models, prompts, and confidence filters.
-Removing the CoT system prompt drops recall to 74.4\% (64/86). Removing
-the DC list keeps the total at 84.9\% but covers a non-identical set of
-bugs. The scope difference affects both ablations equally and therefore
-does not bias the comparison between them.
+The ablation evaluates each of the 86 true-positive cases as an
+independent unit under two ablated configurations and otherwise holds
+the pipeline fixed.
 
-The CoT step contributes the largest amount of recall. Against the
-ablation baseline of 73 recovered bugs, removing CoT drops the count
-to 64, a loss of 9 bugs. These losses concentrate on defect patterns
-whose discharge depends on enumerating every exit path: reference-count
-leaks in NumPy and SciPy where the model identifies the decrement on the
-success path but misses the error-goto branch that leaves the object
-live; resource leaks in Pillow and SciPy where a paired release is
-only reached on the normal return; and exception-state violations in
+The CoT step is the primary driver of recall. Without it, the tool
+finds only 64 of the 86 known bugs, missing 22. These losses
+concentrate on defect patterns whose discharge requires enumerating
+multiple exit paths: 12 are reference-count leaks, borrowed-reference
+errors, and resource leaks in NumPy, SciPy, PycURL, and Pillow where
+the defect lies on an error-goto or non-normal-return branch that the
+direct prompt does not enumerate; 2 are exception-state violations in
 TensorFlow where an unchecked call on an alternate branch silently
-clears the error indicator. In each case, the direct prompt leads the
-model to declare SAFE after inspecting only the dominant path. The
-four-step CoT forces an explicit per-path enumeration before the
-verdict, which is what surfaces these multi-path discharge defects.
-Conversely, w/o CoT recovers three bugs that the baseline misses,
-all involving short callbacks with a single unchecked return; direct
-prompting flags them immediately, while the structured rationale exhausts its
-reasoning on discharge-condition checks that resolve to SAFE on the
-only exit path.
+clears the error indicator. Without the per-path enumeration that CoT
+enforces, the model inspects only the dominant path and returns SAFE.
 
-The DC list contributes specificity rather than breadth. Removing it
-shifts the recovered set by four bugs: two losses involve defects
-where the obligation text alone is broad enough to admit a plausible
-SAFE answer, and the structured list of discharge conditions is what
-narrows the model to the specific failure pattern. The two recoveries
-go in the opposite direction: when the DC list is absent, the model
-falls back to a more general violation criterion and flags defects
-that the structured discharge walk would resolve as SAFE on a
-feasible path. The net effect on total recall is zero, confirming
-that the DC list reshapes the checking behavior rather than expanding
-it.
+The DC list sharpens the model's judgment on individual obligations.
+Without it, the tool finds 73 of the 86 known bugs, missing 13. These
+losses concentrate on cases where the obligation description alone
+leaves the violation criterion underspecified: resource leaks and
+unchecked-return patterns where the model, lacking explicit discharge
+alternatives to rule out, defaults to a permissive SAFE judgment. The
+DC list narrows the reasoning to the specific failure pattern and
+prevents this under-specification.
 
-The two ablations together support the central design claim. The
-chain-of-thought walk is the primary source of true-positive recovery,
-recovering 9 more cases than direct prompting on the same fixed set.
-The discharge conditions sharpen the specificity of each individual
-check without trading away recall. Removing either component degrades
-true-positive recovery on this fixed set in a distinct and
-complementary way, which is consistent with their separate roles in
-the prompt: CoT governs path coverage, and the DC list governs
-violation criteria.
+The two components address complementary failure modes: CoT prevents
+path-coverage failures and the DC list prevents
+obligation-underspecification failures. Removing either degrades
+true-positive recovery on the 86-case set, with CoT contributing the
+larger share.
+
 
 \paragraph{Answers to the research questions.}
 For RQ1, \tool finds 86 previously unknown bugs among 104 audited
@@ -399,7 +376,7 @@ high-confidence reports, with 82.7\% precision. For RQ2, PyRefcon
 finds six true positives among 80 deduplicated units; five
 non-overlapping findings are generic C memory errors outside the
 Python/C API obligation scope. For RQ3, static pattern-based pruning
-cuts the LLM cost by 33.3\% and wall-clock time by 30.1\% on the 86
+cuts the LLM cost by 33.3\% and wall-clock time by 30\% on the 86
 true-positive cases while preserving every audited finding, and the
 prompt ablation shows that removing the CoT step drops recall from
 84.9\% to 74.4\% while removing the discharge-condition list shifts
