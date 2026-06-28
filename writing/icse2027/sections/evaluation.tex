@@ -195,7 +195,7 @@ invariants, and six arise from macro expansion that hides the actual
 reference semantics. These patterns are precisely the failure modes
 that PyCGuard's discharge-condition list is designed to rule out: each
 discharge condition represents a syntactic form that, when present on
-every exit path, proves the obligation is satisfied without requiring
+every exit path, provides evidence that the obligation is satisfied without requiring
 interprocedural or macro-expansion reasoning.
 
 We attempted to run CpyChecker using the configuration reported by
@@ -267,7 +267,7 @@ binding stage: pruning eliminates between 31\% (PyTorch) and 49\%
 the LLM never pays the per-call overhead for cases it would
 ultimately answer SAFE. The end-to-end reduction is smaller than the
 binding-stage reduction because the obligations that survive pruning
-are harder on average; the model emits longer CoT traces on them,
+are harder on average; the model emits longer structured rationale on them,
 which cost more output tokens per call. Pruning therefore
 concentrates LLM effort on syntactically suspicious cases rather than
 removing work uniformly.
@@ -357,7 +357,7 @@ four-step CoT forces an explicit per-path enumeration before the
 verdict, which is what surfaces these multi-path discharge defects.
 Conversely, w/o CoT recovers three bugs that the baseline misses,
 all involving short callbacks with a single unchecked return; direct
-prompting flags them immediately, while the CoT trace exhausts its
+prompting flags them immediately, while the structured rationale exhausts its
 reasoning on discharge-condition checks that resolve to SAFE on the
 only exit path.
 

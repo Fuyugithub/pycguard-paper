@@ -138,7 +138,7 @@ The response schema contains the trigger API, subject, path list, per-condition
 judgments, verdict, violation detail, and confidence. The JSON structure makes
 missing paths and unsupported condition claims visible during audit. It does
 not eliminate model error, which we evaluate through manual review, malformed
-output, prompt ablation, and cross-model agreement.
+output, and prompt ablation.
 
 \paragraph{Multiple triggers and exits.}
 A function can contain several calls that bind the same SO. The prompt retains
@@ -166,7 +166,7 @@ expected JSON object. Network failures are retried with increasing delays.
 JSON recovery removes limited trailing-comma errors and can recover an explicit
 verdict from otherwise malformed text; all other responses remain unknown.
 Recovery status and raw text are preserved so that a parsed verdict does not
-hide format noncompliance. RQ3 reports malformed and unknown rates separately
+hide format noncompliance. Malformed and unknown rates are reported separately
 from detection quality.
 
 \subsection{Report Generation}
